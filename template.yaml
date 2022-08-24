@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-app-example
+  Sample SAM Template for ayte-sam-app-example
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    Tracing: Active
+  Api:
+    TracingEnabled: True
+
+Resources:
+  AyteSamFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.lambdaHandler
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt FilesProcessSQS.Arn
+            BatchSize: 10
+            Enabled: false
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ayte-bucket-sam-example
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      AccessControl: Private
+  FilesProcessSQSDLQ: 
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 300
+      KmsDataKeyReusePeriodSeconds: 300
+      KmsMasterKeyId: alias/aws/sqs
+  FilesProcessSQS: 
+    Type: 'AWS::SQS::Queue'
+    DependsOn: FilesProcessSQSDLQ
+    Properties:
+      MessageRetentionPeriod: 7200
+      VisibilityTimeout: 300
+      KmsDataKeyReusePeriodSeconds: 300
+      KmsMasterKeyId: alias/aws/sqs
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FilesProcessSQSDLQ.Arn
+        maxReceiveCount: 3 # move message to dead letter after 3 tries
+  FilesProcessSQSPolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    DependsOn: 
+      - FilesProcessSQS
+    Properties:
+      Queues:
+        - !Ref FilesProcessSQS
+      PolicyDocument:
+        Id: AllowIncomingAccess
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              AWS: 
+                - !Ref AWS::AccountId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Resource:
+              - !GetAtt FilesProcessSQS.Arn
+  FilesProcessSQSDLQPolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    DependsOn: 
+      - FilesProcessSQSDLQ 
+    Properties:
+      Queues:
+        - !Ref FilesProcessSQSDLQ
+      PolicyDocument:
+        Id: AllowIncomingAccess
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              AWS: 
+                - !Ref AWS::AccountId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Resource:
+              - !GetAtt FilesProcessSQSDLQ.Arn
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  AyteSamFunction:
+    Description: "Ayte sam Lambda Function ARN"
+    Value: !GetAtt AyteSamFunction.Arn
+  AyteFunctionIamRole:
+    Description: "Implicit IAM Role created for Ayte Sam function"
+    Value: !GetAtt AyteSamFunctionRole.Arn
+
