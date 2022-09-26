@@ -27,7 +27,7 @@ const syncPackageJsonFiles = async () => {
   try {
     const directories = await readDirectory(rootSrcPath);
     const fsp = fs.promises;
-    const  originPackage = path.resolve(__dirname, '..', 'package.json');
+    const originPackage = path.resolve(__dirname, '..', 'package.json');
     await fsp.access(originPackage, fs.constants.R_OK);
     directories.forEach(async (destDirectories) => {
       const destinationDir = path.resolve(__dirname, '..', destDirectories, 'package.json');
@@ -36,9 +36,9 @@ const syncPackageJsonFiles = async () => {
         if (error) throw error;
       }) 
     });
-
   } catch (error) {
     console.error("could sync the package.json to deploy on SAM", error); 
+    throw error;
   }
 }; 
 
